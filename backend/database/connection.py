@@ -1,6 +1,7 @@
 """
 FX-Master Database Connection
 Async SQLAlchemy engine and session management.
+Supports PostgreSQL (production) and SQLite (development).
 """
 
 from sqlalchemy.ext.asyncio import (
@@ -12,15 +13,30 @@ from sqlalchemy.orm import DeclarativeBase
 from config import settings
 
 
-# Async engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_size=20,
-    max_overflow=10,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-)
+def _build_engine():
+    """Build the async engine based on DATABASE_URL."""
+    url = settings.DATABASE_URL
+
+    # SQLite needs different config (no pool_size, etc.)
+    if url.startswith("sqlite"):
+        return create_async_engine(
+            url,
+            echo=settings.DEBUG,
+            connect_args={"check_same_thread": False},
+        )
+
+    # PostgreSQL / other databases
+    return create_async_engine(
+        url,
+        echo=settings.DEBUG,
+        pool_size=20,
+        max_overflow=10,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+    )
+
+
+engine = _build_engine()
 
 # Session factory
 async_session_factory = async_sessionmaker(

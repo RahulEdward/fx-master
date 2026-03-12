@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useBroker } from '../../store/BrokerContext';
-import { brokerAPI, tradingAPI, marketAPI } from '../../services/api';
-import { priceWS } from '../../services/websocket';
+import { useBroker } from '../store/BrokerContext';
+import { brokerAPI, tradingAPI, marketAPI } from '../services/api';
+import { priceWS } from '../services/websocket';
 
 const WATCH_SYMBOLS = ['EUR_USD', 'GBP_USD', 'USD_JPY', 'XAU_USD'];
 

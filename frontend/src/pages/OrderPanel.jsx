@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useBroker } from '../../store/BrokerContext';
-import { tradingAPI } from '../../services/api';
+import { useBroker } from '../store/BrokerContext';
+import { tradingAPI } from '../services/api';
 
 const POPULAR_PAIRS = ['EUR_USD', 'GBP_USD', 'USD_JPY', 'AUD_USD', 'USD_CAD', 'USD_CHF', 'NZD_USD', 'XAU_USD'];
 

@@ -6,7 +6,6 @@ Fetches candles from brokers and persists to the database.
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import datetime
 
 from models.broker_account import BrokerAccount
@@ -43,26 +42,36 @@ async def fetch_and_store_candles(
     try:
         candles = await get_candles(client, instrument, granularity, count)
 
-        # Bulk upsert candles
+        # DB-agnostic upsert (works with SQLite and PostgreSQL)
         for c in candles:
             ts = c.get("timestamp")
             if isinstance(ts, str):
                 ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
-            stmt = pg_insert(MarketData).values(
-                instrument=instrument,
-                granularity=granularity,
-                broker_name=account.broker_name,
-                open=c["open"], high=c["high"],
-                low=c["low"], close=c["close"],
-                volume=c.get("volume", 0),
-                timestamp=ts,
-            ).on_conflict_do_update(
-                constraint="uix_market_data_candle",
-                set_={"close": c["close"], "high": c["high"],
-                       "low": c["low"], "volume": c.get("volume", 0)},
+            # Check if candle exists
+            existing = await db.execute(
+                select(MarketData).where(
+                    MarketData.instrument == instrument,
+                    MarketData.granularity == granularity,
+                    MarketData.broker_name == account.broker_name,
+                    MarketData.timestamp == ts,
+                )
             )
-            await db.execute(stmt)
+            row = existing.scalar_one_or_none()
+            if row:
+                row.close = c["close"]
+                row.high = c["high"]
+                row.low = c["low"]
+                row.volume = c.get("volume", 0)
+            else:
+                db.add(MarketData(
+                    instrument=instrument, granularity=granularity,
+                    broker_name=account.broker_name,
+                    open=c["open"], high=c["high"],
+                    low=c["low"], close=c["close"],
+                    volume=c.get("volume", 0), timestamp=ts,
+                ))
+            await db.flush()
 
         logger.info(f"Stored {len(candles)} candles for {instrument} {granularity}")
         return candles

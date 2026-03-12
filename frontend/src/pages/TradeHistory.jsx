@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useBroker } from '../../store/BrokerContext';
-import { tradingAPI } from '../../services/api';
+import { useBroker } from '../store/BrokerContext';
+import { tradingAPI } from '../services/api';
 
 export default function TradeHistory() {
   const { activeBrokerAccount } = useBroker();

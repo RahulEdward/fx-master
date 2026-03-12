@@ -69,9 +69,7 @@ async def get_current_user_id(
 
 # --- Credential Encryption (Fernet symmetric) ---
 def _get_cipher() -> Fernet:
-    key = settings.ENCRYPTION_KEY
-    if not key:
-        key = Fernet.generate_key().decode()
+    key = settings.get_encryption_key()
     return Fernet(key.encode() if isinstance(key, str) else key)
 
 

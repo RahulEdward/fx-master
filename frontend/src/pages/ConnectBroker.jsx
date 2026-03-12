@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { brokerAPI } from '../../services/api';
-import { useBroker } from '../../store/BrokerContext';
+import { brokerAPI } from '../services/api';
+import { useBroker } from '../store/BrokerContext';
 
 export default function ConnectBroker() {
   const { setActiveBrokerAccount, setBrokerAccounts } = useBroker();
