@@ -46,6 +46,7 @@ export const brokerAPI = {
   getAccountSummary: (id) => request('GET', `/broker/oanda/accounts/${id}/summary`),
   getInstruments: (id) => request('GET', `/broker/oanda/accounts/${id}/instruments`),
   disconnect: (id) => request('DELETE', `/broker/oanda/accounts/${id}/disconnect`),
+  removeAccount: (id) => request('DELETE', `/broker/oanda/accounts/${id}/remove`),
 };
 
 // ---- Market Data ----

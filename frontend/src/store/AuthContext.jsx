@@ -33,7 +33,12 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (data) => {
-    const res = await authAPI.register(data);
+    const res = await authAPI.register({ 
+      email: data.email, 
+      password: data.password,
+      username: data.name.toLowerCase().replace(/\s+/g, '_'), // Generate username from name
+      full_name: data.name 
+    });
     localStorage.setItem('access_token', res.data.access_token);
     localStorage.setItem('refresh_token', res.data.refresh_token);
     setToken(res.data.access_token);

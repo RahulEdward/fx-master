@@ -149,5 +149,7 @@ async def get_multiple_prices(
             "spread": round(ask - bid, 6) if bid and ask else 0.0,
             "time": p.get("time"),
             "tradeable": p.get("tradeable", False),
+            "bids": bids,
+            "asks": asks,
         })
     return result

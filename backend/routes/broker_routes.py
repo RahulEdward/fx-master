@@ -195,6 +195,26 @@ async def disconnect_broker(
     if not account:
         raise HTTPException(404, "Broker account not found")
 
-    account.is_active = False
     account.is_connected = False
     return build_response(message="Broker account disconnected")
+
+@router.delete("/accounts/{broker_account_id}/remove")
+async def remove_broker(
+    broker_account_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove (soft delete) a broker account entirely."""
+    result = await db.execute(
+        select(BrokerAccount).where(
+            BrokerAccount.id == broker_account_id,
+            BrokerAccount.user_id == user_id,
+        )
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(404, "Broker account not found")
+
+    account.is_active = False
+    account.is_connected = False
+    return build_response(message="Broker account removed")

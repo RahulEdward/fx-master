@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from './store/AuthContext';
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const navigate = useNavigate();
+  const { login, register } = useAuth();
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setMode(initialMode);
@@ -51,15 +55,32 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
             {mode === 'login' ? 'Enter your credentials to access your algorithmic workspace.' : 'Deploy your first autonomous strategy today.'}
           </p>
 
-          <form className="space-y-5" onSubmit={(e) => {
+          {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3 mb-4">{error}</div>}
+
+          <form className="space-y-5" onSubmit={async (e) => {
             e.preventDefault();
             // Basic validation check
             if (mode === 'register' && (!passwordsMatch || !name || !email)) return;
             if (mode === 'login' && (!email || !password)) return;
             
-            // Redirect to Dashboard on success!
-            onClose();
-            navigate('/dashboard');
+            setLoading(true);
+            setError('');
+            
+            try {
+              if (mode === 'login') {
+                await login(email, password);
+              } else {
+                await register({ name, email, password });
+              }
+              
+              // Redirect to Trading Terminal on success!
+              onClose();
+              navigate('/terminal');
+            } catch (err) {
+              setError(err.message || 'Authentication failed');
+            } finally {
+              setLoading(false);
+            }
           }}>
             
             {/* Registration specific fields: Name */}
@@ -159,8 +180,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
               </div>
             )}
 
-            <button className="w-full py-4 mt-6 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-transform active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.15)]">
-              {mode === 'login' ? 'Authenticate' : 'Generate Keys & Register'}
+            <button type="submit" disabled={loading} className="w-full py-4 mt-6 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-transform active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.15)] disabled:opacity-50 disabled:cursor-not-allowed">
+              {loading ? 'Processing...' : (mode === 'login' ? 'Authenticate' : 'Generate Keys & Register')}
             </button>
           </form>
         </div>

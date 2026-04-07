@@ -3,7 +3,7 @@ import { useBroker } from '../store/BrokerContext';
 import { brokerAPI, tradingAPI, marketAPI } from '../services/api';
 import { priceWS } from '../services/websocket';
 
-const WATCH_SYMBOLS = ['EUR_USD', 'GBP_USD', 'USD_JPY', 'XAU_USD'];
+const WATCH_SYMBOLS = ['EUR_USD', 'GBP_USD', 'USD_JPY', 'AUD_USD', 'USD_CAD', 'NZD_USD', 'EUR_GBP', 'XAU_USD'];
 
 export default function TradingDashboard() {
   const { activeBrokerAccount } = useBroker();
@@ -12,12 +12,16 @@ export default function TradingDashboard() {
   const [positions, setPositions] = useState([]);
   const [prices, setPrices] = useState({});
   const [loading, setLoading] = useState(true);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
+  const [marketStatus, setMarketStatus] = useState('OPEN');
 
   const accId = activeBrokerAccount?.broker_account_id || activeBrokerAccount?.id;
 
   useEffect(() => {
     if (!accId) return;
     loadData();
+    const interval = setInterval(loadData, 5000); // Refresh every 5s
+    
     // Connect WebSocket for live prices
     priceWS.connect(WATCH_SYMBOLS);
     const unsubs = WATCH_SYMBOLS.map(sym =>
@@ -25,78 +29,147 @@ export default function TradingDashboard() {
         setPrices(prev => ({ ...prev, [tick.instrument]: tick }));
       })
     );
-    return () => { unsubs.forEach(u => u()); priceWS.disconnect(); };
+    
+    // Check market status
+    checkMarketStatus();
+    const statusInterval = setInterval(checkMarketStatus, 60000);
+    
+    return () => { 
+      clearInterval(interval);
+      clearInterval(statusInterval);
+      unsubs.forEach(u => u()); 
+      priceWS.disconnect(); 
+    };
   }, [accId]);
 
+  function checkMarketStatus() {
+    const now = new Date();
+    const day = now.getUTCDay();
+    const hour = now.getUTCHours();
+    // Forex market: Sunday 22:00 UTC to Friday 22:00 UTC
+    if (day === 6 || (day === 5 && hour >= 22) || (day === 0 && hour < 22)) {
+      setMarketStatus('CLOSED');
+    } else {
+      setMarketStatus('OPEN');
+    }
+  }
+
   async function loadData() {
-    if (!accId) return;
-    setLoading(true);
     try {
-      const [sumRes, trRes, posRes] = await Promise.all([
+      const [summaryData, tradesData, positionsData] = await Promise.allSettled([
         brokerAPI.getAccountSummary(accId),
         tradingAPI.getTrades(accId),
         tradingAPI.getPositions(accId),
       ]);
-      setSummary(sumRes.data);
-      setTrades(trRes.data || []);
-      setPositions(posRes.data || []);
-    } catch (e) { console.error(e); }
-    setLoading(false);
+      if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
+      if (tradesData.status === 'fulfilled') setTrades(tradesData.value?.trades || []);
+      if (positionsData.status === 'fulfilled') setPositions(positionsData.value?.positions || []);
+    } catch (e) {
+      console.error('Failed to load dashboard data:', e);
+    } finally {
+      setLoading(false);
+    }
   }
 
+  // --- No broker connected state ---
   if (!accId) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="text-center">
-          <div className="text-6xl mb-4">🔗</div>
-          <h2 className="text-xl font-bold text-white mb-2">No Broker Connected</h2>
-          <p className="text-gray-500">Connect your OANDA account to start trading.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/10">
+          <span className="text-4xl">🔗</span>
+        </div>
+        <h2 className="text-2xl font-bold text-white">Connect Your Broker</h2>
+        <p className="text-gray-500 text-center max-w-md">
+          Connect your OANDA account to start trading. Go to the <strong>Connect Broker</strong> page to get started.
+        </p>
+        <a href="/connect" className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold hover:opacity-90 transition-opacity">
+          Connect Broker →
+        </a>
+      </div>
+    );
+  }
+
+  // --- Loading state ---
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-500">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-[60vh]"><div className="text-gray-500 animate-pulse text-lg">Loading dashboard...</div></div>;
-  }
+  const formatCurrency = (val) => {
+    if (val == null) return '—';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: summary?.currency || 'USD' }).format(val);
+  };
+
+  const formatPair = (sym) => sym?.replace('_', '/') || sym;
 
   return (
     <div className="space-y-6">
-      {/* Account Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Balance', value: `$${summary?.balance?.toLocaleString() || '0'}`, color: 'text-white' },
-          { label: 'Margin Available', value: `$${summary?.margin_available?.toLocaleString() || '0'}`, color: 'text-blue-400' },
-          { label: 'Unrealized P/L', value: `$${summary?.unrealized_pl?.toFixed(2) || '0'}`,
-            color: (summary?.unrealized_pl || 0) >= 0 ? 'text-green-400' : 'text-red-400' },
-          { label: 'Open Trades', value: summary?.open_trade_count || 0, color: 'text-amber-400' },
-        ].map(item => (
-          <div key={item.label} className="bg-[#0d1117] border border-white/10 rounded-xl p-4">
-            <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{item.label}</div>
-            <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
-          </div>
-        ))}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Trading Dashboard</h1>
+          <p className="text-gray-500 text-sm mt-1">Account: {accId}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+            marketStatus === 'OPEN' 
+              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+              : 'bg-red-500/15 text-red-400 border border-red-500/30'
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${marketStatus === 'OPEN' ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+            Market {marketStatus}
+          </span>
+        </div>
       </div>
 
-      {/* Live Prices */}
-      <div className="bg-[#0d1117] border border-white/10 rounded-xl p-5">
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Live Prices</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Account Summary Cards */}
+      {summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: 'Balance', value: formatCurrency(summary.balance), icon: '💰', color: 'from-blue-500/10 to-blue-600/5' },
+            { label: 'Unrealized P&L', value: formatCurrency(summary.unrealizedPL || summary.unrealized_pl), icon: '📈', color: (summary.unrealizedPL || summary.unrealized_pl || 0) >= 0 ? 'from-emerald-500/10 to-emerald-600/5' : 'from-red-500/10 to-red-600/5' },
+            { label: 'Margin Used', value: formatCurrency(summary.marginUsed || summary.margin_used), icon: '🔒', color: 'from-amber-500/10 to-amber-600/5' },
+            { label: 'Open Trades', value: summary.openTradeCount || summary.open_trade_count || trades.length, icon: '📊', color: 'from-purple-500/10 to-purple-600/5' },
+          ].map((card) => (
+            <div key={card.label} className={`rounded-2xl bg-gradient-to-br ${card.color} border border-white/5 p-5`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-gray-500 text-sm font-medium">{card.label}</span>
+                <span className="text-lg">{card.icon}</span>
+              </div>
+              <p className="text-xl font-bold text-white">{card.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Live Prices Grid */}
+      <div>
+        <h2 className="text-lg font-semibold text-white mb-3">Live Prices</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {WATCH_SYMBOLS.map(sym => {
-            const p = prices[sym];
+            const tick = prices[sym];
             return (
-              <div key={sym} className="bg-white/5 rounded-lg p-3 border border-white/5">
-                <div className="text-xs text-gray-500 font-bold mb-1">{sym.replace('_', '/')}</div>
-                {p ? (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-red-400 font-mono">{p.bid?.toFixed(5)}</span>
-                      <span className="text-blue-400 font-mono">{p.ask?.toFixed(5)}</span>
+              <div key={sym} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors">
+                <p className="text-sm font-semibold text-white mb-2">{formatPair(sym)}</p>
+                {tick ? (
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Bid</p>
+                      <p className="text-sm font-mono text-blue-400">{Number(tick.bid).toFixed(5)}</p>
                     </div>
-                    <div className="text-[10px] text-gray-600 mt-1">Spread: {(p.spread * 10000).toFixed(1)} pips</div>
-                  </>
+                    <div>
+                      <p className="text-xs text-gray-500">Ask</p>
+                      <p className="text-sm font-mono text-emerald-400">{Number(tick.ask).toFixed(5)}</p>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="text-gray-600 text-sm animate-pulse">Waiting...</div>
+                  <p className="text-xs text-gray-600">Waiting...</p>
                 )}
               </div>
             );
@@ -104,37 +177,38 @@ export default function TradingDashboard() {
         </div>
       </div>
 
-      {/* Open Trades */}
-      <div className="bg-[#0d1117] border border-white/10 rounded-xl p-5">
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Open Trades ({trades.length})</h3>
-        {trades.length === 0 ? (
-          <p className="text-gray-600 text-sm">No open trades</p>
+      {/* Open Positions */}
+      <div>
+        <h2 className="text-lg font-semibold text-white mb-3">Open Positions</h2>
+        {positions.length === 0 ? (
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-8 text-center">
+            <p className="text-gray-500">No open positions</p>
+          </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="rounded-xl border border-white/5 overflow-hidden">
             <table className="w-full text-sm">
-              <thead><tr className="text-gray-500 text-xs uppercase border-b border-white/5">
-                <th className="text-left pb-2 pr-4">Instrument</th>
-                <th className="text-left pb-2 pr-4">Side</th>
-                <th className="text-right pb-2 pr-4">Units</th>
-                <th className="text-right pb-2 pr-4">Entry</th>
-                <th className="text-right pb-2 pr-4">P/L</th>
-                <th className="text-right pb-2">Actions</th>
-              </tr></thead>
-              <tbody>
-                {trades.map(t => (
-                  <tr key={t.trade_id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="py-3 pr-4 font-mono text-white">{t.instrument}</td>
-                    <td className={`py-3 pr-4 font-bold ${t.side === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>{t.side}</td>
-                    <td className="py-3 pr-4 text-right font-mono text-white">{Math.abs(t.units)}</td>
-                    <td className="py-3 pr-4 text-right font-mono text-gray-400">{t.entry_price}</td>
-                    <td className={`py-3 pr-4 text-right font-mono ${t.unrealized_pl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      ${t.unrealized_pl?.toFixed(2)}
+              <thead>
+                <tr className="bg-white/[0.03] text-gray-500 text-xs uppercase tracking-wider">
+                  <th className="text-left px-4 py-3">Instrument</th>
+                  <th className="text-right px-4 py-3">Units</th>
+                  <th className="text-right px-4 py-3">Avg Price</th>
+                  <th className="text-right px-4 py-3">P&L</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {positions.map((pos, i) => (
+                  <tr key={i} className="hover:bg-white/[0.02]">
+                    <td className="px-4 py-3 font-medium text-white">{formatPair(pos.instrument)}</td>
+                    <td className="px-4 py-3 text-right text-gray-300">
+                      {pos.long?.units !== '0' ? pos.long.units : pos.short?.units}
                     </td>
-                    <td className="py-3 text-right">
-                      <button onClick={() => handleCloseTrade(t.trade_id)}
-                        className="px-3 py-1 rounded-md bg-red-500/10 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors">
-                        Close
-                      </button>
+                    <td className="px-4 py-3 text-right text-gray-300 font-mono">
+                      {pos.long?.averagePrice || pos.short?.averagePrice || '—'}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-semibold ${
+                      Number(pos.unrealizedPL) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                    }`}>
+                      {formatCurrency(pos.unrealizedPL)}
                     </td>
                   </tr>
                 ))}
@@ -144,28 +218,40 @@ export default function TradingDashboard() {
         )}
       </div>
 
-      {/* Positions */}
-      <div className="bg-[#0d1117] border border-white/10 rounded-xl p-5">
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Positions ({positions.length})</h3>
-        {positions.length === 0 ? (
-          <p className="text-gray-600 text-sm">No open positions</p>
+      {/* Recent Trades */}
+      <div>
+        <h2 className="text-lg font-semibold text-white mb-3">Open Trades</h2>
+        {trades.length === 0 ? (
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-8 text-center">
+            <p className="text-gray-500">No open trades</p>
+          </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="rounded-xl border border-white/5 overflow-hidden">
             <table className="w-full text-sm">
-              <thead><tr className="text-gray-500 text-xs uppercase border-b border-white/5">
-                <th className="text-left pb-2 pr-4">Instrument</th>
-                <th className="text-right pb-2 pr-4">Long</th>
-                <th className="text-right pb-2 pr-4">Short</th>
-                <th className="text-right pb-2">Unrealized P/L</th>
-              </tr></thead>
-              <tbody>
-                {positions.map(p => (
-                  <tr key={p.instrument} className="border-b border-white/5">
-                    <td className="py-3 pr-4 font-mono text-white">{p.instrument}</td>
-                    <td className="py-3 pr-4 text-right font-mono text-green-400">{p.long_units || '—'}</td>
-                    <td className="py-3 pr-4 text-right font-mono text-red-400">{p.short_units || '—'}</td>
-                    <td className={`py-3 text-right font-mono ${p.unrealized_pl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      ${p.unrealized_pl?.toFixed(2)}
+              <thead>
+                <tr className="bg-white/[0.03] text-gray-500 text-xs uppercase tracking-wider">
+                  <th className="text-left px-4 py-3">Instrument</th>
+                  <th className="text-right px-4 py-3">Units</th>
+                  <th className="text-right px-4 py-3">Open Price</th>
+                  <th className="text-right px-4 py-3">Current P&L</th>
+                  <th className="text-right px-4 py-3">Opened</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {trades.slice(0, 10).map((trade, i) => (
+                  <tr key={i} className="hover:bg-white/[0.02]">
+                    <td className="px-4 py-3 font-medium text-white">{formatPair(trade.instrument)}</td>
+                    <td className={`px-4 py-3 text-right ${Number(trade.currentUnits || trade.units) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {trade.currentUnits || trade.units}
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-300 font-mono">{Number(trade.price).toFixed(5)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${
+                      Number(trade.unrealizedPL) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                    }`}>
+                      {formatCurrency(trade.unrealizedPL)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-500 text-xs">
+                      {new Date(trade.openTime).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}
@@ -176,12 +262,4 @@ export default function TradingDashboard() {
       </div>
     </div>
   );
-
-  async function handleCloseTrade(tradeId) {
-    if (!confirm('Close this trade?')) return;
-    try {
-      await tradingAPI.closeTrade(accId, tradeId);
-      loadData();
-    } catch (e) { alert(e.message); }
-  }
 }

@@ -4,6 +4,74 @@
 
 @layer base {
   body {
-    @apply bg-[#0b0f19] text-white;
+    @apply bg-[#08080d] text-white;
   }
+}
+
+/* React Grid Layout Custom Overrides */
+.react-grid-item.react-grid-placeholder {
+  background: #10b981 !important; /* emerald-500 */
+  opacity: 0.1 !important;
+  border: 1px dashed #34d399 !important; /* emerald-400 */
+  border-radius: 4px;
+  transition-duration: 100ms;
+}
+
+.react-resizable-handle {
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 50;
+}
+
+.react-grid-item:hover .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-resizable-handle::after {
+  border-right: 2px solid #52525b !important; /* zinc-500 */
+  border-bottom: 2px solid #52525b !important;
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.react-resizable-handle:hover::after {
+  border-right: 2px solid #10b981 !important;
+  border-bottom: 2px solid #10b981 !important;
+}
+
+/* Base scrollbar styling for terminal feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #08080d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e1e30;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2a2a42;
+}
+
+/* Remove spin buttons from number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Hide TradingView Watermark / Logo on Lightweight Charts */
+#tv-attr-logo,
+.tv-lightweight-charts a {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
