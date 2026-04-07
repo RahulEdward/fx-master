@@ -33,6 +33,10 @@ npm-debug.log*
 # Build output
 frontend/dist/
 frontend/build/
+frontend/build_output.txt
+
+# Reference docs
+reference/
 
 # OS
 .DS_Store
