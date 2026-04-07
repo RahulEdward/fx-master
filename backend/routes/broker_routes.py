@@ -13,6 +13,7 @@ from utils.security import get_current_user_id, encrypt_credential, decrypt_cred
 from utils.helpers import build_response, utcnow
 
 from broker.oanda.client import OandaClient
+from broker.oanda._client_cache import get_cached_client
 from broker.oanda.auth import validate_token, connect_account
 from broker.oanda.accounts import (
     get_accounts, get_account_summary, get_account_configuration,
@@ -21,11 +22,6 @@ from broker.oanda.accounts import (
 from broker.oanda.schemas import ConnectBrokerRequest
 
 router = APIRouter(prefix="/broker/oanda", tags=["Broker - OANDA"])
-
-
-def _make_client(account: BrokerAccount) -> OandaClient:
-    token = decrypt_credential(account.api_token_encrypted)
-    return OandaClient(token, account.account_id, account.environment)
 
 
 @router.post("/connect")
@@ -139,18 +135,15 @@ async def account_summary(
     if not account:
         raise HTTPException(404, "Broker account not found")
 
-    client = _make_client(account)
-    try:
-        summary = await get_account_summary(client)
-        # Update local snapshot
-        account.balance = summary.get("balance")
-        account.margin_available = summary.get("margin_available")
-        account.margin_used = summary.get("margin_used")
-        account.unrealized_pl = summary.get("unrealized_pl")
-        account.last_synced_at = utcnow()
-        return build_response(data=summary)
-    finally:
-        await client.close()
+    client = await get_cached_client(account)
+    summary = await get_account_summary(client)
+    # Update local snapshot
+    account.balance = summary.get("balance")
+    account.margin_available = summary.get("margin_available")
+    account.margin_used = summary.get("margin_used")
+    account.unrealized_pl = summary.get("unrealized_pl")
+    account.last_synced_at = utcnow()
+    return build_response(data=summary)
 
 
 @router.get("/accounts/{broker_account_id}/instruments")
@@ -170,12 +163,9 @@ async def list_instruments(
     if not account:
         raise HTTPException(404, "Broker account not found")
 
-    client = _make_client(account)
-    try:
-        instruments = await get_account_instruments(client)
-        return build_response(data=instruments)
-    finally:
-        await client.close()
+    client = await get_cached_client(account)
+    instruments = await get_account_instruments(client)
+    return build_response(data=instruments)
 
 
 @router.delete("/accounts/{broker_account_id}/disconnect")

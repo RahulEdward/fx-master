@@ -61,7 +61,7 @@ export function PriceSync() {
     };
 
     fetchLivePrices();
-    const interval = setInterval(fetchLivePrices, 2000);
+    const interval = setInterval(fetchLivePrices, 1000);
     return () => { active = false; clearInterval(interval); };
   }, [accId, allSymbols, updatePrice]);
 

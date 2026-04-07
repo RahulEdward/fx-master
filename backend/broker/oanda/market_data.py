@@ -56,8 +56,9 @@ async def get_candles(
     candles = response.get("candles", [])
     result = []
     for c in candles:
-        if not c.get("complete", False) and granularity != "S5":
-            continue  # Skip incomplete candles except for tick-level
+        if not c.get("complete", False) and granularity not in ("S5", "M1"):
+            # Include incomplete candle for live updates, skip only for very small timeframes
+            pass  # Allow through
 
         mid = c.get("mid", {})
         candle_data = {

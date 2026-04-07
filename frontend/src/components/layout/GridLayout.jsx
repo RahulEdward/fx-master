@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect, useRef } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -82,6 +82,20 @@ export function GridLayout() {
     }
   }, [isEditMode, isAutosaveEnabled, activeLayoutName, saveLayout, updatePendingLayout, panels, pendingLayouts, savedLayouts]);
 
+  // Auto-scroll to newly visible panels
+  const prevVisibleCount = useRef(panels.filter(p => p.visible).length);
+  useEffect(() => {
+    const visibleCount = panels.filter(p => p.visible).length;
+    if (visibleCount > prevVisibleCount.current) {
+      // A new panel was added — scroll to bottom after layout settles
+      setTimeout(() => {
+        const container = document.querySelector('.layout')?.parentElement;
+        if (container) container.scrollTop = container.scrollHeight;
+      }, 100);
+    }
+    prevVisibleCount.current = visibleCount;
+  }, [panels]);
+
   return (
     <ResponsiveGridLayout
       className="layout"
@@ -89,9 +103,11 @@ export function GridLayout() {
       breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
       cols={{ lg: 24, md: 20, sm: 12, xs: 8, xxs: 4 }}
       rowHeight={30}
+      autoSize={true}
       draggableHandle=".panel-drag-handle"
       isDraggable={!maximizedPanelId}
       isResizable={!maximizedPanelId}
+      resizeHandles={['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne']}
       onLayoutChange={handleLayoutChange}
       margin={[4, 4]}
       containerPadding={[4, 4]}

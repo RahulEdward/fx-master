@@ -41,6 +41,8 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down...")
     await ws_manager.stop()
+    from broker.oanda._client_cache import close_all
+    await close_all()
     await close_db()
     logger.info("Shutdown complete")
 

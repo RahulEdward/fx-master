@@ -12,6 +12,7 @@ export function ChartPanel() {
   const { selectedSymbol, chartSettings, setChartSettings, prices } = useTerminalStore();
   const { activeBrokerAccount } = useBroker();
   const [loading, setLoading] = useState(false);
+  const [ohlc, setOhlc] = useState(null);
 
   const accId = activeBrokerAccount?.broker_account_id || activeBrokerAccount?.id;
 
@@ -54,6 +55,20 @@ export function ChartPanel() {
     chartRef.current = chart;
     seriesRef.current = series;
 
+    // Crosshair move → show OHLC legend
+    chart.subscribeCrosshairMove((param) => {
+      if (!param || !param.time || !param.seriesData) {
+        setOhlc(null);
+        return;
+      }
+      const candle = param.seriesData.get(series);
+      if (candle) {
+        setOhlc({ open: candle.open, high: candle.high, low: candle.low, close: candle.close, time: param.time });
+      } else {
+        setOhlc(null);
+      }
+    });
+
     const handleResize = () => {
       if (chartContainerRef.current) {
         chart.applyOptions({
@@ -80,14 +95,29 @@ export function ChartPanel() {
       setLoading(true);
       lastCandleRef.current = null;
       try {
-        const res = await marketAPI.getCandles(accId, selectedSymbol, chartSettings.timeframe, 300);
-        const candles = (res.data?.candles || res.data || []).map(c => ({
+        // Smart candle count per timeframe
+        const countMap = {
+          M1: 300, M5: 500, M15: 500, M30: 500,
+          H1: 500, H4: 500, D: 500, W: 260, M: 120,
+        };
+        const count = countMap[chartSettings.timeframe] || 500;
+        const res = await marketAPI.getCandles(accId, selectedSymbol, chartSettings.timeframe, count);
+        const raw = (res.data?.candles || res.data || []).map(c => ({
           time: Math.floor(new Date(c.time || c.timestamp).getTime() / 1000),
           open: parseFloat(c.mid?.o || c.open),
           high: parseFloat(c.mid?.h || c.high),
           low: parseFloat(c.mid?.l || c.low),
           close: parseFloat(c.mid?.c || c.close),
-        })).filter(c => !isNaN(c.time));
+        })).filter(c => !isNaN(c.time) && c.time > 0);
+
+        // Sort by time and deduplicate
+        raw.sort((a, b) => a.time - b.time);
+        const candles = [];
+        for (const c of raw) {
+          if (candles.length === 0 || c.time > candles[candles.length - 1].time) {
+            candles.push(c);
+          }
+        }
 
         if (seriesRef.current && candles.length > 0) {
           seriesRef.current.setData(candles);
@@ -120,9 +150,13 @@ export function ChartPanel() {
     };
     const interval = tfSeconds[chartSettings.timeframe] || 300;
     const now = Math.floor(Date.now() / 1000);
-    const candleTime = Math.floor(now / interval) * interval;
+    let candleTime = Math.floor(now / interval) * interval;
 
+    // Ensure candleTime is never before the last known candle
     const last = lastCandleRef.current;
+    if (last && candleTime < last.time) {
+      candleTime = last.time;
+    }
     if (last && last.time === candleTime) {
       // Update existing candle
       const updated = {
@@ -143,6 +177,7 @@ export function ChartPanel() {
   }, [prices[selectedSymbol], chartSettings.timeframe]);
 
   const pair = FOREX_PAIRS.find(p => p.symbol === selectedSymbol);
+  const decimals = pair?.pip === 0.01 ? 3 : 5;
 
   return (
     <div className="h-full flex flex-col bg-[#08080d]">
@@ -176,7 +211,25 @@ export function ChartPanel() {
       </div>
 
       {/* Chart Canvas */}
-      <div ref={chartContainerRef} className="flex-1" />
+      <div ref={chartContainerRef} className="flex-1 relative">
+        {/* OHLC Legend Overlay */}
+        {ohlc && (
+          <div className="absolute top-1 left-2 z-10 flex items-center gap-3 pointer-events-none">
+            <span className="text-[10px] font-mono text-zinc-500">
+              O <span className={ohlc.close >= ohlc.open ? 'text-emerald-400' : 'text-red-400'}>{ohlc.open.toFixed(decimals)}</span>
+            </span>
+            <span className="text-[10px] font-mono text-zinc-500">
+              H <span className={ohlc.close >= ohlc.open ? 'text-emerald-400' : 'text-red-400'}>{ohlc.high.toFixed(decimals)}</span>
+            </span>
+            <span className="text-[10px] font-mono text-zinc-500">
+              L <span className={ohlc.close >= ohlc.open ? 'text-emerald-400' : 'text-red-400'}>{ohlc.low.toFixed(decimals)}</span>
+            </span>
+            <span className="text-[10px] font-mono text-zinc-500">
+              C <span className={ohlc.close >= ohlc.open ? 'text-emerald-400' : 'text-red-400'}>{ohlc.close.toFixed(decimals)}</span>
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* No broker message */}
       {!accId && (

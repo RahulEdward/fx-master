@@ -77,7 +77,7 @@ export function TerminalShell() {
     <div className="flex flex-col h-full w-full flex-1 bg-[#08080d] text-zinc-200 overflow-hidden">
       <PriceSync />
       <TopBar />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <GridLayout />
       </div>
       <CommandOutput />

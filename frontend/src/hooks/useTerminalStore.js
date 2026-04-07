@@ -72,9 +72,32 @@ export const useTerminalStore = create(
 
       // ─── Prices (live) ───────────────────────
       prices: {},
-      updatePrice: (symbol, data) => set(s => ({
-        prices: { ...s.prices, [symbol]: { ...s.prices[symbol], ...data, updatedAt: Date.now() } },
-      })),
+      updatePrice: (symbol, data) => set(s => {
+        const prev = s.prices[symbol];
+        const bidDir = prev && data.bid !== undefined
+          ? (data.bid > prev.bid ? 'up' : data.bid < prev.bid ? 'down' : prev.bidDir || null)
+          : null;
+        const askDir = prev && data.ask !== undefined
+          ? (data.ask > prev.ask ? 'up' : data.ask < prev.ask ? 'down' : prev.askDir || null)
+          : null;
+        const openBid = prev?.openBid ?? data.bid;
+        return {
+          prices: {
+            ...s.prices,
+            [symbol]: {
+              ...prev,
+              ...data,
+              prevBid: prev?.bid,
+              prevAsk: prev?.ask,
+              openBid,
+              bidDir,
+              askDir,
+              flashAt: (data.bid !== prev?.bid || data.ask !== prev?.ask) ? Date.now() : (prev?.flashAt || 0),
+              updatedAt: Date.now(),
+            },
+          },
+        };
+      }),
 
       // ─── Logs / Command Output ───────────────
       logs: [],
